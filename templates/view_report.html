@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>View Report</title></head>
+<body>
+    <h2>View Patient Report</h2>
+
+    <p><strong>File:</strong> {{ report[1] }}</p>
+
+    <iframe src="/uploaded_reports/{{ report[2] }}" width="600" height="400"></iframe>
+
+    <form method="POST">
+        <textarea name="comment" placeholder="Write doctor comment" required></textarea><br>
+        <button type="submit">Submit Comment</button>
+    </form>
+
+    <br><a href="/doctor">Back</a>
+</body>
+</html>

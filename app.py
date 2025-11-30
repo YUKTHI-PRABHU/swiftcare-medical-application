@@ -1,115 +1,144 @@
-import streamlit as st
-from utils.table_extraction import extract_tables_from_pdf
-from utils.summarization import initialize_llm_pipeline, summarize_table
-from utils.chatbot import chatbot_response
-from utils.summary_visualization import visualize_summary
-
-import pandas as pd
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session, jsonify
 import os
-import uuid
-import base64
+import sqlite3
+import re
 
+app = Flask(__name__)
+app.secret_key = "abc123"
 
-def main():
-    st.set_page_config(
-        page_title="📄 PDF Table Extraction & Summarization",
-        layout="wide",
-        page_icon="📈",
+UPLOAD_FOLDER = "uploaded_reports"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+DB_FILE = "database.db"
+
+# ---------------- Database Setup ----------------
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS uploads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_name TEXT,
+            filename TEXT,
+            status TEXT DEFAULT 'pending',
+            doctor_comment TEXT DEFAULT ''
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def add_upload(patient_name, filename):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO uploads (patient_name, filename) VALUES (?, ?)", (patient_name, filename))
+    conn.commit()
+    conn.close()
+
+def get_patient_reports(patient_name):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM uploads WHERE patient_name=?", (patient_name,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_pending_uploads():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM uploads WHERE status='pending'")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_reviewed_uploads():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT * FROM uploads WHERE status='viewed'")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def update_doctor_comment(upload_id, comment):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE uploads SET doctor_comment=?, status='viewed' WHERE id=?", (comment, upload_id))
+    conn.commit()
+    conn.close()
+
+# ---------------- Dummy AI Analysis ----------------
+def analyze_document(file_path):
+    return (
+        "🩺 AI Analysis Complete:\n"
+        "- Vital signs normal\n"
+        "- Mild symptoms detected\n"
+        "- First Aid Suggestion: Rest & hydration\n"
+        "- Consult doctor if symptoms persist"
     )
 
-    st.title("📄 PDF Table Extraction and Summarization")
+# ---------------- Routes ----------------
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-    # Sidebar Upload
-    with st.sidebar:
-        st.header("Upload PDF")
-        uploaded_file = st.file_uploader("Choose a PDF", type="pdf")
-        temp_filename = None
-        
-        if uploaded_file:
-            temp_filename = f"temp_{uuid.uuid4().hex}.pdf"
-            with open(temp_filename, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            st.success("PDF Uploaded Successfully!")
+@app.route("/patient", methods=["GET", "POST"])
+def patient():
+    if request.method == "POST":
+        patient_name = request.form.get("name") or "Anonymous"
+        session["patient_name"] = patient_name
 
-    if uploaded_file:
-        try:
-            # -------- PDF PREVIEW --------
-            st.subheader("📖 PDF Preview")
-            try:
-                with open(temp_filename, "rb") as f:
-                    pdf_bytes = f.read()
-                    base64_pdf = base64.b64encode(pdf_bytes).decode('utf-8')
-                pdf_display = f"""
-                    <iframe src="data:application/pdf;base64,{base64_pdf}" 
-                            width="100%" height="600"></iframe>
-                """
-                st.markdown(pdf_display, unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"⚠️ Error previewing PDF: {e}")
+        file = request.files["file"]
+        filename = file.filename.replace(" ", "_")
+        path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(path)
 
-            # -------- Extract Tables --------
-            st.subheader("📊 Extracted Tables")
-            try:
-                dfs, _ = extract_tables_from_pdf(temp_filename)
-            except Exception as e:
-                st.error(f"⚠️ Error extracting tables: {e}")
-                return
+        add_upload(patient_name, filename)
+        analysis = analyze_document(path)
+        reports = get_patient_reports(patient_name)
 
-            if dfs:
-                for idx, df in enumerate(dfs):
-                    st.write(f"### Table {idx + 1}")
-                    st.dataframe(df)
-            else:
-                st.warning("⚠️ No tables found.")
-                return
+        return render_template("patient_dashboard.html",
+                               name=patient_name,
+                               analysis=analysis,
+                               reports=reports,
+                               filename=filename)
 
-            # -------- Summarization --------
-            st.subheader("📝 Table Summaries")
+    return render_template("patient_form.html")
 
-            client = initialize_llm_pipeline()
-            st.session_state["summaries_list"] = []
+@app.route("/doctor")
+def doctor_dashboard():
+    pending = get_pending_uploads()
+    reviewed = get_reviewed_uploads()
+    return render_template("doctor_dashboard.html", pending=pending, viewed=reviewed)
 
-            for idx, df in enumerate(dfs):
-                table_text = df.to_string(index=False)
+@app.route("/doctor/comment/<int:upload_id>", methods=["POST"])
+def doctor_comment(upload_id):
+    comment = request.form.get("comment")
+    update_doctor_comment(upload_id, comment)
+    return redirect(url_for("doctor_dashboard"))
 
-                try:
-                    summary = summarize_table(client, table_text)
-                except Exception as e:
-                    st.error(f"❌ Error summarizing Table {idx + 1}: {e}")
-                    continue
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
-                st.write(f"### Summary for Table {idx + 1}")
-                st.success(summary)
+# ---------------- Chatbot Logic ----------------
+@app.route("/chatbot", methods=["POST"])
+def chatbot():
+    user_msg = request.json.get("message", "").lower()
 
-                # Save summary for chatbot
-                st.session_state["summaries_list"].append(summary)
+    if "report" in user_msg:
+        reply = "You can view your uploaded reports above in the dashboard. 😊"
+    elif re.search(r"fever|temperature", user_msg):
+        reply = "It may be mild fever 🤒. Stay hydrated and rest well."
+    elif re.search(r"cough|cold", user_msg):
+        reply = "Warm liquids & steam inhalation help for cold/cough 😷."
+    elif re.search(r"headache", user_msg):
+        reply = "Try resting, reducing screen time, and stay hydrated 💧."
+    elif re.search(r"stomach|gas|acid", user_msg):
+        reply = "Eat light food and drink ORS. Avoid spicy and oily items 🍽️."
+    else:
+        reply = "Ask me about symptoms like fever, headache, cough or reports!"
 
-                # ---- VISUALIZE SUMMARY (LINE GRAPH) ----
-                visualize_summary(summary, idx)
-
-            # -------- CHATBOT SECTION --------
-            st.subheader("💬 Chatbot: Ask Questions Based on Summaries")
-
-            all_summaries_text = "\n\n".join(st.session_state["summaries_list"])
-
-            user_question = st.text_input("Ask something about the summarized data:")
-
-            if user_question:
-                try:
-                    reply = chatbot_response(client, all_summaries_text, user_question)
-                    st.write("### 🤖 Chatbot Response:")
-                    st.info(reply)
-                except Exception as e:
-                    st.error(f"❌ Chatbot Error: {e}")
-
-        finally:
-            # Delete temporary PDF file
-            if temp_filename and os.path.exists(temp_filename):
-                try:
-                    os.remove(temp_filename)
-                except:
-                    pass
-
+    return jsonify({"response": reply})
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=True)

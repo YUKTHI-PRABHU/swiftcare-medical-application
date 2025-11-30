@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Patient Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #eef2f3; }
+        .dashboard-card { border-radius: 10px; }
+        .title-text { color: #0d6efd; font-weight: bold; }
+        .table th { background-color: #0d6efd; color: white; }
+        .status-btn { padding: 4px 8px; border-radius: 6px; color: white; }
+        .pending { background-color: orange; }
+        .viewed { background-color: green; }
+        .no-comment { color: #6c757d; font-style: italic; }
+
+        /* Chatbot Button */
+        #chatbot-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #0d6efd;
+            color: white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 26px;
+            cursor: pointer;
+        }
+        .chat-window {
+            width: 300px;
+            height: 450px;
+            background: white;
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+            display: none;
+        }
+        .chat-body {
+            height: 330px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        .chat-bubble-user {
+            background: #d6e9ff;
+            margin: 5px;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: right;
+        }
+        .chat-bubble-bot {
+            background: #ececec;
+            margin: 5px;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body class="p-4">
+
+<div class="container">
+    <h2 class="mb-4 title-text">Welcome {{ name }} 👋</h2>
+
+    {% if analysis %}
+    <div class="card p-4 mb-4 shadow dashboard-card border-success">
+        <h5 class="text-success">📄 AI Report Analysis: {{ filename }}</h5>
+        <pre class="bg-light p-3 rounded">{{ analysis }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Chatbot Container -->
+<div class="container mt-4">
+    <div class="card shadow-sm p-3">
+        <h5 class="text-primary fw-bold mb-3">💬 Health Assistant</h5>
+
+        <div id="chat-body" class="border rounded p-3 mb-3" 
+             style="height: 200px; overflow-y: auto; background: #f8f9fa;">
+        </div>
+
+        <div class="input-group">
+            <input id="user-input" class="form-control" placeholder="Ask about your health symptoms...">
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+    <h4 class="text-dark mb-3">Your Uploaded Reports</h4>
+
+    <table class="table table-hover shadow-sm">
+        <thead>
+        <tr>
+            <th>Report</th>
+            <th>Status</th>
+            <th>Doctor Remarks</th>
+        </tr>
+        </thead>
+
+        <tbody>
+        {% for r in reports %}
+        <tr>
+            <td>
+                <a href="{{ url_for('uploaded_file', filename=r[2]) }}" target="_blank" class="fw-bold">
+                    {{ r[2] }}
+                </a>
+            </td>
+
+            <td>
+                {% if r[3] == 'pending' %}
+                    <span class="status-btn pending">Pending</span>
+                {% else %}
+                    <span class="status-btn viewed">Reviewed</span>
+                {% endif %}
+            </td>
+
+            <td>
+                {% if r[4] %}
+                    {{ r[4] }}
+                {% else %}
+                    <span class="no-comment">Awaiting doctor's review...</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="/patient" class="btn btn-primary mt-3">📤 Upload More Reports</a>
+</div>
+
+<script>
+async function sendMessage() {
+    let input = document.getElementById("user-input");
+    let msg = input.value.trim();
+    if (!msg) return;
+
+    let body = document.getElementById("chat-body");
+    body.innerHTML += `<div style="text-align:right;">
+                            <span class='badge bg-primary p-2'>${msg}</span>
+                       </div><br>`;
+    input.value = "";
+    
+    let res = await fetch("/chatbot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ message: msg })
+    });
+
+    let data = await res.json();
+    body.innerHTML += `<div style="text-align:left;">
+                            <span class='badge bg-secondary p-2'>${data.response}</span>
+                       </div><br>`;
+    body.scrollTop = body.scrollHeight;
+}
+</script>
+
+<script>
+function toggleChatbot() {
+    let box = document.getElementById("chat-window");
+    box.style.display = (box.style.display === "block" ? "none" : "block");
+}
+
+async function sendMessage() {
+    let input = document.getElementById("user-input");
+    let msg = input.value.trim();
+    if (!msg) return;
+
+    let body = document.getElementById("chat-body");
+    body.innerHTML += `<div class='chat-bubble-user'>${msg}</div>`;
+    input.value = "";
+    
+    let res = await fetch("/chatbot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ message: msg })
+    });
+
+    let data = await res.json();
+    body.innerHTML += `<div class='chat-bubble-bot'>${data.response}</div>`;
+    body.scrollTop = body.scrollHeight;
+}
+</script>
+
+</body>
+</html>

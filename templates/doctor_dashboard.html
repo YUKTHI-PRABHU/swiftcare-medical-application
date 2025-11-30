@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Doctor Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+<div class="container">
+    <h2>Doctor Dashboard 🩺</h2>
+
+    <h4 class="mt-4">Pending Reports</h4>
+    <table class="table table-striped">
+        <tr><th>Patient</th><th>Report File</th><th>Action</th></tr>
+        {% for p in pending %}
+        <tr>
+            <td>{{ p[1] }}</td>
+            <td><a href="{{ url_for('uploaded_file', filename=p[2]) }}" target="_blank">{{ p[2] }}</a></td>
+            <td>
+                <form action="/doctor/comment/{{ p[0] }}" method="POST" class="d-flex">
+                    <input name="comment" class="form-control me-2" placeholder="Add comment" required>
+                    <button class="btn btn-success">Send</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h4 class="mt-5">Reviewed Reports</h4>
+    <table class="table table-bordered">
+        <tr><th>Patient</th><th>Report File</th><th>Doctor Comment</th></tr>
+        {% for v in viewed %}
+        <tr>
+            <td>{{ v[1] }}</td>
+            <td><a href="{{ url_for('uploaded_file', filename=v[2]) }}" target="_blank">{{ v[2] }}</a></td>
+            <td>{{ v[4] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <a href="/" class="btn btn-secondary mt-3">⬅ Back</a>
+</div>
+</body>
+</html>

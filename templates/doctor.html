@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<head><title>Doctor Dashboard</title></head>
+<body>
+    <h2>Doctor Dashboard</h2>
+
+    <h3>Pending Reports</h3>
+    <ul>
+        {% for row in pending %}
+        <li>
+            {{ row[1] }} -
+            <a href="/view/{{ row[0] }}">View</a>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <h3>Reviewed Reports</h3>
+    <ul>
+        {% for row in reviewed %}
+        <li>
+            {{ row[1] }} (Reviewed)
+        </li>
+        {% endfor %}
+    </ul>
+
+    <br><a href="/">Back</a>
+</body>
+</html>

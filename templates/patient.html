@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<html>
+<head><title>Patient Dashboard</title></head>
+<body>
+    <h2>Patient Dashboard</h2>
+
+    <form action="/patient" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload & Analyze</button>
+    </form>
+
+    {% if analysis %}
+        <h3>Analysis Result ({{ filename }})</h3>
+        <pre>{{ analysis }}</pre>
+    {% endif %}
+
+    <br><a href="/">Back</a>
+</body>
+</html>
